@@ -1,0 +1,21 @@
+{
+    "name": "1-billion-row-challenge",
+    "version": "1.0.0",
+    "author": "Austin K Smith",
+    "description": "1 billion row challenge implemented in Node.js",
+    "homepage": "http://www.hamsters.io/",
+    "main": "challenge.js",
+    "scripts": {
+      "test": "echo \"Error: no test specified\" && exit 1",
+      "start": "node challenge.js"
+    },
+    "keywords": [],
+    "license": "Artistic-2.0",
+    "devDependencies": {
+
+    },
+    "dependencies": {
+  
+    }
+  }
+  
