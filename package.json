@@ -9,8 +9,7 @@
       "test": "echo \"Error: no test specified\" && exit 1",
       "start": "node --max-old-space-size=4096 --experimental-worker --experimental-top-level-await challenge.js",
       "ruby": "ruby challenge.rb",
-      "jruby": "jruby challenge.rb",
-      "python": "python3 challenge.rb"
+      "jruby": "jruby challenge.rb"
     },
     "keywords": [],
     "license": "Artistic-2.0",

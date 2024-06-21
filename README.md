@@ -32,7 +32,7 @@
 
 * Clone the repository
 * Install python3 using your preferred method
-* Run `npm run python`
+* Run `python3 challenge.py`
 
 # Considerations
 
