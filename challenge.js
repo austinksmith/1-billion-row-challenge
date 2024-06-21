@@ -1,5 +1,7 @@
 const fs = require('fs');
 const readline = require('readline');
+const { Worker, parentPort } = require('worker_threads');
+const hamsters = require('hamsters.js');
 
 class Station {
   constructor() {
@@ -30,33 +32,72 @@ class Station {
 
 const stations = {};
 
-function parseLine(line) {
-  const parts = line.split(';');
-  const station = parts[0];
-  const temperature = parseFloat(parts[1]);
-  return { station, temperature };
+let buffer = [];
+const bufferSize = 250000; // Adjust the buffer size as needed
+let processedLinesCount = 0; // Track total lines processed
+
+async function processBuffer(bufferToProcess) {
+  const params = {
+    array: bufferToProcess,
+    threads: hamsters.maxThreads, // Adjust the number of threads as needed
+  };
+
+  const output = await hamsters.promise(params, function () {
+    rtn.data = [];
+    for (var i = 0; i < params.array.length; i++) {
+      parseLine(params.array[i]);
+    }
+
+    function parseLine(line) {
+      const parts = line.split(';');
+      const station = parts[0];
+      const temperature = parseFloat(parts[1]);
+      rtn.data.push({ station, temperature });
+    }
+  });
+
+  processOutput(output);
 }
+
+function processOutput(output) {
+  for (let i = 0; i < output.length; i++) {
+    const { station, temperature } = output[i];
+    if (!stations[station]) {
+      stations[station] = new Station();
+    }
+    stations[station].addTemperature(temperature);
+  }
+}
+
 
 function processData(filename) {
   const rl = readline.createInterface({
     input: fs.createReadStream(filename),
     output: process.stdout,
-    terminal: false
+    terminal: false,
   });
-
-  console.time('Parsing Time'); // Start timing
 
   rl.on('line', (line) => {
-    const { station, temperature } = parseLine(line);
-    if (!stations[station]) {
-      stations[station] = new Station();
+    buffer.push(line);
+    processedLinesCount++;
+
+    // Process data when the buffer size is a multiple of bufferSize
+    if (buffer.length >= bufferSize && buffer.length % bufferSize === 0) {
+      const bufferToProcess = buffer.slice(0, bufferSize);
+      buffer = buffer.slice(bufferSize); // Remove processed lines from buffer immediately
+      processBuffer(bufferToProcess); // Process the chunk
     }
-    stations[station].addTemperature(temperature);
   });
 
-  rl.on('close', () => {
-    console.timeEnd('Parsing Time'); // End timing
-    // printData();
+  rl.on('close', async () => {
+    // Process any remaining lines in the buffer
+    while (buffer.length > 0) {
+      const bufferToProcess = buffer.slice(0, bufferSize);
+      buffer = buffer.slice(bufferSize); // Remove processed lines from buffer immediately
+      await processBuffer(bufferToProcess); // Process the chunk
+    }
+    console.timeEnd('Total Processing Time'); // End timing for entire processing
+    printData();
   });
 
   rl.on('error', (err) => {
@@ -80,5 +121,13 @@ function printData() {
   process.stdout.write('}\n');
 }
 
+hamsters.init({
+  Worker: Worker,
+  parentPort: parentPort,
+  maxThreads: 8,
+  persistence: false,
+});
+
+console.time('Total Processing Time'); // Start timing for entire processing
 // Replace 'measurements.txt' with your actual filename
 processData('measurements.txt');

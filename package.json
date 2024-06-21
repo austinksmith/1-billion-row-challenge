@@ -7,15 +7,16 @@
     "main": "challenge.js",
     "scripts": {
       "test": "echo \"Error: no test specified\" && exit 1",
-      "start": "node challenge.js"
+      "start": "node --max-old-space-size=4096 --experimental-worker --experimental-top-level-await challenge.js",
+      "ruby": "ruby challenge.rb",
+      "jruby": "jruby challenge.rb"
     },
     "keywords": [],
     "license": "Artistic-2.0",
-    "devDependencies": {
-
-    },
     "dependencies": {
-  
+        "hamsters.js": "^5.5.8"
+    },
+    "devDependencies": {
+        "ws": "^8.17.1"
     }
-  }
-  
+}
