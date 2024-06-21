@@ -1,5 +1,4 @@
 const fs = require('fs');
-const readline = require('readline');
 const { Worker, parentPort } = require('worker_threads');
 const hamsters = require('hamsters.js');
 
@@ -32,20 +31,33 @@ class Station {
 
 const stations = {};
 
-let buffer = [];
-const bufferSize = 250000; // Adjust the buffer size as needed
+const chunkSize = 32 * 1024 * 1024; // 32 MB
 let processedLinesCount = 0; // Track total lines processed
+const totalLines = 1000000000; // Predefined total lines in the file
 
-async function processBuffer(bufferToProcess) {
+// Progress bar settings
+const progressBarLength = 50; // Length of the progress bar in characters
+
+function progressBar(progress) {
+  const percentage = Math.min(100, Math.round(progress * 100));
+  const progressLength = Math.min(progressBarLength, Math.round(progressBarLength * progress));
+  const bar = '='.repeat(progressLength) + '-'.repeat(progressBarLength - progressLength);
+  process.stdout.write(`\r[${bar}] ${percentage}%`);
+}
+
+async function processTypedArray(typedArray) {
   const params = {
-    array: bufferToProcess,
+    array: typedArray,
+    dataType: 'Uint8',
     threads: hamsters.maxThreads, // Adjust the number of threads as needed
   };
 
   const output = await hamsters.promise(params, function () {
+    const decoder = new TextDecoder();
+    const array = decoder.decode(params.array).split('\n');
     rtn.data = [];
-    for (var i = 0; i < params.array.length; i++) {
-      parseLine(params.array[i]);
+    for (var i = 0; i < array.length; i++) {
+      parseLine(array[i]);
     }
 
     function parseLine(line) {
@@ -57,6 +69,12 @@ async function processBuffer(bufferToProcess) {
   });
 
   processOutput(output);
+
+  // Increment lines counted by the number of lines processed
+  processedLinesCount += output.length;
+
+  // Update progress bar
+  progressBar(processedLinesCount / totalLines);
 }
 
 function processOutput(output) {
@@ -69,38 +87,34 @@ function processOutput(output) {
   }
 }
 
-
 function processData(filename) {
-  const rl = readline.createInterface({
-    input: fs.createReadStream(filename),
-    output: process.stdout,
-    terminal: false,
+  const stream = fs.createReadStream(filename, { highWaterMark: chunkSize });
+  let partialLine = '';
+
+  stream.on('data', async (chunk) => {
+    const typedArray = new Uint8Array(chunk);
+    const decoder = new TextDecoder();
+    const data = decoder.decode(typedArray);
+    const lines = (partialLine + data).split('\n');
+    partialLine = lines.pop(); // Save incomplete line fragment
+
+    // Convert the lines to a TypedArray without reconversion
+    const newTypedArray = new TextEncoder().encode(lines.join('\n'));
+    await processTypedArray(newTypedArray);
   });
 
-  rl.on('line', (line) => {
-    buffer.push(line);
-    processedLinesCount++;
-
-    // Process data when the buffer size is a multiple of bufferSize
-    if (buffer.length >= bufferSize && buffer.length % bufferSize === 0) {
-      const bufferToProcess = buffer.slice(0, bufferSize);
-      buffer = buffer.slice(bufferSize); // Remove processed lines from buffer immediately
-      processBuffer(bufferToProcess); // Process the chunk
-    }
-  });
-
-  rl.on('close', async () => {
+  stream.on('end', async () => {
     // Process any remaining lines in the buffer
-    while (buffer.length > 0) {
-      const bufferToProcess = buffer.slice(0, bufferSize);
-      buffer = buffer.slice(bufferSize); // Remove processed lines from buffer immediately
-      await processBuffer(bufferToProcess); // Process the chunk
+    if (partialLine) {
+      const finalTypedArray = new TextEncoder().encode(partialLine);
+      await processTypedArray(finalTypedArray); // Process the final partial line
     }
+    console.log('\nProcessing completed.');
     console.timeEnd('Total Processing Time'); // End timing for entire processing
     printData();
   });
 
-  rl.on('error', (err) => {
+  stream.on('error', (err) => {
     console.error('Error reading file:', err);
   });
 }
