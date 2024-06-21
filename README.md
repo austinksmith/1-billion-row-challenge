@@ -28,6 +28,12 @@
 * `gem install concurrent-ruby`
 * Run `npm run jruby`
 
+# Python Setup
+
+* Clone the repository
+* Install python3 using your preferred method
+* Run `npm run python`
+
 # Considerations
 
 Both the jRuby and Ruby implementation use the exact same file and logic, both using the concurrent-ruby gem for threading, unfortunately in normal Ruby we have
