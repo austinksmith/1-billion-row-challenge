@@ -4,7 +4,7 @@
 
 **Website**: [asmithdev.com](http://www.asmithdev.com)
 
-**Description**: The 1 Billion Row Challenge Implemented in Node and Ruby
+**Description**: The 1 Billion Row Challenge Implemented in Node.js using Hamsters.js and Ruby and Python
 
 **License**: Artistic License 2.0
 
