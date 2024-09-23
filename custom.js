@@ -10,11 +10,14 @@
 ***********************************************************************************/
 
 const { parentPort } = require('worker_threads');
+const readline = require('readline');
+const fs = require('fs');
+const path = require('path');
 
 global.params = {};
 global.rtn = {};
 
-parentPort.on('message', (message) => {
+parentPort.on('message', async (message) => {
   params = message;
   rtn = {
     data: [],
@@ -27,9 +30,64 @@ parentPort.on('message', (message) => {
   }
 
   eval(params.hamstersJob);
-
+  await processLines(params);
   returnResponse(rtn);
 });
+
+const processLines = async function(params) {
+  const inputFile = params.inputFile;
+  const startLine = params.index.start;
+  const endLine = params.index.end;
+
+  const rl = readline.createInterface({
+      input: fs.createReadStream(inputFile),
+      crlfDelay: Infinity
+  });
+
+  let currentLine = 0;
+  const locations = new Map();
+
+  return new Promise((resolve) => {
+      rl.on('line', (line) => {
+          // Skip lines until we reach the starting line
+          if (currentLine < startLine) {
+              currentLine++;
+              return;
+          }
+
+          // Stop processing when we reach the end line
+          if (currentLine >= endLine) {
+              rl.close();  // Close the readline interface
+              return;
+          }
+
+          currentLine++;
+
+          // Process the line (e.g., temperature and location parsing)
+          const i = line.indexOf(';');
+          if (i !== -1) {
+              const name = line.substring(0, i);
+              const temp = parseFloat(line.substring(i + 1));
+
+              if (!locations.has(name)) {
+                  locations.set(name, { count: 1, min: temp, max: temp, total: temp });
+              } else {
+                  const loc = locations.get(name);
+                  loc.count++;
+                  loc.total += temp;
+                  loc.min = Math.min(loc.min, temp);
+                  loc.max = Math.max(loc.max, temp);
+              }
+          }
+      });
+
+      rl.on('close', () => {
+          // Notify the main thread that the worker is done
+          rtn.data = locations;  // Send data back to main thread
+          resolve();  // Resolve the promise
+      });
+  });
+}
 
 function returnResponse(rtn) {
   const buffers = getTransferableObjects(rtn);
