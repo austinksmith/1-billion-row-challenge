@@ -1,18 +1,5 @@
-/* jshint esversion: 6, curly: true, eqeqeq: true, forin: true */
-
-/***********************************************************************************
-* Title: Hamsters.js                                                               *
-* Description: 100% Vanilla Javascript Multithreading & Parallel Execution Library *
-* Author: Austin K. Smith                                                          *
-* Contact: austin@asmithdev.com                                                    *  
-* Copyright: 2015 Austin K. Smith - austin@asmithdev.com                           * 
-* License: Artistic License 2.0                                                    *
-***********************************************************************************/
-
 const { parentPort } = require('worker_threads');
-const readline = require('readline');
 const fs = require('fs');
-const path = require('path');
 
 global.params = {};
 global.rtn = {};
@@ -28,7 +15,6 @@ parentPort.on('message', async (message) => {
   if (params.sharedBuffer) {
     params.sharedArray = typedArrayFromBuffer(params.dataType, params.sharedBuffer);
   }
-
   eval(params.hamstersJob);
   await processLines(params);
   returnResponse(rtn);
@@ -36,58 +22,61 @@ parentPort.on('message', async (message) => {
 
 const processLines = async function(params) {
   const inputFile = params.inputFile;
-  const startLine = params.index.start;
-  const endLine = params.index.end;
+  const startByte = params.index.start;
+  const endByte = params.index.end;
 
-  const rl = readline.createInterface({
-      input: fs.createReadStream(inputFile),
-      crlfDelay: Infinity
-  });
+  const fd = fs.openSync(inputFile, 'r');
 
-  let currentLine = 0;
   const locations = new Map();
+  let currentPosition = startByte;
 
-  return new Promise((resolve) => {
-      rl.on('line', (line) => {
-          // Skip lines until we reach the starting line
-          if (currentLine < startLine) {
-              currentLine++;
-              return;
+  // Loop to read until the end byte is reached
+  while (currentPosition < endByte) {
+    const chunkSize = Math.min(64 * 1024, endByte - currentPosition); // Read in 64 KB chunks
+    const buffer = Buffer.alloc(chunkSize);
+    const bytesRead = fs.readSync(fd, buffer, 0, chunkSize, currentPosition);
+    currentPosition += bytesRead;
+
+    // Convert buffer to string and split by lines
+    const data = buffer.toString();
+    const lines = data.split('\n');
+
+    // Process lines
+    for (let i = 0; i < lines.length; i++) {
+      if (currentPosition - bytesRead + i < startByte) {
+        continue; // Skip lines before startByte
+      }
+      if (currentPosition - bytesRead + i >= endByte) {
+        break; // Stop processing when reaching endByte
+      }
+
+      // Process the line (e.g., temperature and location parsing)
+      const line = lines[i];
+      if (line.trim()) {
+        const index = line.indexOf(';');
+        if (index !== -1) {
+          const name = line.substring(0, index);
+          const temp = parseFloat(line.substring(index + 1));
+
+          if (!locations.has(name)) {
+            locations.set(name, { count: 1, min: temp, max: temp, total: temp });
+          } else {
+            const loc = locations.get(name);
+            loc.count++;
+            loc.total += temp;
+            loc.min = Math.min(loc.min, temp);
+            loc.max = Math.max(loc.max, temp);
           }
+        }
+      }
+    }
+  }
 
-          // Stop processing when we reach the end line
-          if (currentLine >= endLine) {
-              rl.close();  // Close the readline interface
-              return;
-          }
+  // Notify the main thread that the worker is done
+  rtn.data = locations // Send data back to main thread
+  fs.closeSync(fd); // Close the file descriptor
+};
 
-          currentLine++;
-
-          // Process the line (e.g., temperature and location parsing)
-          const i = line.indexOf(';');
-          if (i !== -1) {
-              const name = line.substring(0, i);
-              const temp = parseFloat(line.substring(i + 1));
-
-              if (!locations.has(name)) {
-                  locations.set(name, { count: 1, min: temp, max: temp, total: temp });
-              } else {
-                  const loc = locations.get(name);
-                  loc.count++;
-                  loc.total += temp;
-                  loc.min = Math.min(loc.min, temp);
-                  loc.max = Math.max(loc.max, temp);
-              }
-          }
-      });
-
-      rl.on('close', () => {
-          // Notify the main thread that the worker is done
-          rtn.data = locations;  // Send data back to main thread
-          resolve();  // Resolve the promise
-      });
-  });
-}
 
 function returnResponse(rtn) {
   const buffers = getTransferableObjects(rtn);
@@ -119,32 +108,16 @@ function typedArrayFromBuffer(dataType, buffer) {
 }
 
 function getTransferableObjects(obj) {
-  const transferableObjects = new Set();
-  const typedArrayTypes = [
-    'Int32Array', 'Uint8Array', 'Uint8ClampedArray', 'Int16Array', 
-    'Uint16Array', 'Uint32Array', 'Float32Array', 'Float64Array'
-  ];
-  const otherTransferables = [
-    'ArrayBuffer', 'MessagePort', 'ImageBitmap', 'OffscreenCanvas'
-  ];
+  const transferableObjects = [];
 
-  const globalContext = typeof self !== 'undefined' ? self : this;
-
-  const allTypes = [...typedArrayTypes, ...otherTransferables];
-
-  for (const prop in obj) {
-    if (obj.hasOwnProperty(prop)) {
-      for (const type of allTypes) {
-        if (typeof globalContext[type] !== 'undefined' && obj[prop] instanceof globalContext[type]) {
-          if (typedArrayTypes.includes(type)) {
-            transferableObjects.add(obj[prop].buffer);
-          } else {
-            transferableObjects.add(obj[prop]);
-          }
-        }
-      }
+  Object.entries(obj).forEach(([_, value]) => {
+    // Check if the value is a typed array or DataView
+    if (ArrayBuffer.isView(value)) {
+      transferableObjects.push(value.buffer);  // Add buffer
+    } else if (value instanceof ArrayBuffer) { // Check if object is an array buffer
+      transferableObjects.push(value);  // Add object itself
     }
-  }
+  });
 
-  return Array.from(transferableObjects);
+  return transferableObjects;
 }
