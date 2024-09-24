@@ -6,14 +6,15 @@
     "homepage": "http://www.hamsters.io/",
     "main": "challenge.js",
     "scripts": {
-      "test": "echo \"Error: no test specified\" && exit 1",
-      "start": "node --max-old-space-size=4096 --experimental-worker --experimental-top-level-await challenge.js",
-      "ruby": "ruby challenge.rb",
-      "jruby": "jruby challenge.rb"
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "start": "node --max-old-space-size=4096 --experimental-worker --experimental-top-level-await challenge.js",
+        "ruby": "ruby challenge.rb",
+        "jruby": "jruby challenge.rb"
     },
     "keywords": [],
     "license": "Artistic-2.0",
     "dependencies": {
+        "cli-progress": "^3.12.0",
         "hamsters.js": "^5.5.8"
     },
     "devDependencies": {
