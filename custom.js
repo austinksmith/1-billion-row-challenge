@@ -67,7 +67,7 @@ const processLines = async function(params) {
 
           currentLine++;
           processedLines++;
-          if(processedLines % 100000 === 0) {
+          if(processedLines % 1000000 === 0) {
             updateProgressBar(processedLines, linesToProcess);  // Update progress based on the worker's range
           }
 
